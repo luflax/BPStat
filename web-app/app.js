@@ -394,31 +394,72 @@ function exportToCSV() {
 async function loadDomains() {
     try {
         showState('loading');
-        const domains = await api.getDomains();
-        appState.domains = domains.filter(d => d.has_series);
+        const allDomains = await api.getDomains();
+
+        // Keep all domains for hierarchy building, but mark which have series
+        appState.domains = allDomains;
 
         // Clear and populate domain select
         elements.domainSelect.innerHTML = '<option value="">Select a domain...</option>';
 
-        // Group domains by parent
-        const rootDomains = appState.domains.filter(d => !d.parent_id);
-        const childDomains = appState.domains.filter(d => d.parent_id);
+        // Build domain hierarchy with proper depth calculation
+        const domainMap = new Map();
+        allDomains.forEach(d => domainMap.set(d.id, { ...d, children: [] }));
 
-        rootDomains.forEach(domain => {
-            const option = document.createElement('option');
-            option.value = domain.id;
-            option.textContent = domain.label;
-            elements.domainSelect.appendChild(option);
+        // Calculate depth for each domain
+        function getDepth(domainId, visited = new Set()) {
+            if (visited.has(domainId)) return 0; // Circular reference protection
+            visited.add(domainId);
 
-            // Add children
-            const children = childDomains.filter(c => c.parent_id === domain.id);
-            children.forEach(child => {
-                const childOption = document.createElement('option');
-                childOption.value = child.id;
-                childOption.textContent = `  └─ ${child.label}`;
-                elements.domainSelect.appendChild(childOption);
-            });
+            const domain = domainMap.get(domainId);
+            if (!domain || !domain.parent_id) return 0;
+            return 1 + getDepth(domain.parent_id, visited);
+        }
+
+        // Build tree structure
+        const rootDomains = [];
+        allDomains.forEach(domain => {
+            const node = domainMap.get(domain.id);
+            node.depth = getDepth(domain.id);
+
+            if (domain.parent_id && domainMap.has(domain.parent_id)) {
+                domainMap.get(domain.parent_id).children.push(node);
+            } else {
+                rootDomains.push(node);
+            }
         });
+
+        // Sort by order attribute at each level
+        function sortByOrder(nodes) {
+            nodes.sort((a, b) => (a.order || 0) - (b.order || 0));
+            nodes.forEach(node => {
+                if (node.children.length > 0) {
+                    sortByOrder(node.children);
+                }
+            });
+        }
+        sortByOrder(rootDomains);
+
+        // Recursively add domains to select, only showing those with series
+        function addDomainOption(domain, depth = 0) {
+            if (domain.has_series) {
+                const option = document.createElement('option');
+                option.value = domain.id;
+
+                // Create indentation based on depth
+                const indent = '  '.repeat(depth);
+                const prefix = depth > 0 ? '└─ ' : '';
+                option.textContent = `${indent}${prefix}${domain.label}`;
+
+                elements.domainSelect.appendChild(option);
+            }
+
+            // Process children
+            domain.children.forEach(child => addDomainOption(child, depth + 1));
+        }
+
+        // Add all domains recursively
+        rootDomains.forEach(domain => addDomainOption(domain));
 
         updateApiStatus(true);
         showState('empty');
