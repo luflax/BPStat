@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BPStat Data Visualizer</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>BPStat Data Visualizer</h1>
+            <p class="subtitle">Portuguese Central Bank Statistical Data Explorer</p>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="panel">
+                    <h2>Data Selection</h2>
+
+                    <!-- Domain Selection -->
+                    <div class="form-group">
+                        <label for="domain-select">Domain (Topic):</label>
+                        <select id="domain-select" class="form-control">
+                            <option value="">Loading domains...</option>
+                        </select>
+                    </div>
+
+                    <!-- Dataset Selection -->
+                    <div class="form-group">
+                        <label for="dataset-select">Dataset:</label>
+                        <select id="dataset-select" class="form-control" disabled>
+                            <option value="">Select a domain first</option>
+                        </select>
+                    </div>
+
+                    <!-- Series Input -->
+                    <div class="form-group">
+                        <label for="series-input">Series ID(s):</label>
+                        <input
+                            type="text"
+                            id="series-input"
+                            class="form-control"
+                            placeholder="e.g., 12518356 or 167795,167791"
+                            disabled
+                        >
+                        <small class="help-text">Enter one or more series IDs (comma-separated)</small>
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="filters-section">
+                        <h3>Filters</h3>
+
+                        <div class="form-group">
+                            <label for="date-from">Date From:</label>
+                            <input type="date" id="date-from" class="form-control">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="date-to">Date To:</label>
+                            <input type="date" id="date-to" class="form-control">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="recurrence-select">Recurrence:</label>
+                            <select id="recurrence-select" class="form-control">
+                                <option value="">All</option>
+                                <option value="A">Annual</option>
+                                <option value="S">Biannual</option>
+                                <option value="T">Quarterly</option>
+                                <option value="M">Monthly</option>
+                                <option value="D">Daily</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="last-n-obs">Last N Observations:</label>
+                            <input
+                                type="number"
+                                id="last-n-obs"
+                                class="form-control"
+                                placeholder="e.g., 12"
+                                min="1"
+                            >
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="actions">
+                        <button id="fetch-data-btn" class="btn btn-primary" disabled>
+                            Fetch Data
+                        </button>
+                        <button id="clear-btn" class="btn btn-secondary">
+                            Clear
+                        </button>
+                    </div>
+                </div>
+
+                <!-- API Info -->
+                <div class="api-info">
+                    <h3>API Status</h3>
+                    <div id="api-status">
+                        <span class="status-indicator">●</span>
+                        <span id="status-text">Initializing...</span>
+                    </div>
+                    <div id="throttle-info" class="throttle-info hidden">
+                        Throttle: <span id="throttle-value">-</span>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Visualization Area -->
+            <main class="content">
+                <!-- Loading State -->
+                <div id="loading-state" class="hidden">
+                    <div class="spinner"></div>
+                    <p>Loading data...</p>
+                </div>
+
+                <!-- Error State -->
+                <div id="error-state" class="hidden">
+                    <div class="error-message">
+                        <h3>Error</h3>
+                        <p id="error-text"></p>
+                    </div>
+                </div>
+
+                <!-- Empty State -->
+                <div id="empty-state">
+                    <div class="empty-message">
+                        <h2>Welcome to BPStat Data Visualizer</h2>
+                        <p>Select a domain and dataset from the sidebar to begin exploring Portuguese Central Bank statistical data.</p>
+                        <ul class="features-list">
+                            <li>Browse statistical domains and datasets</li>
+                            <li>Visualize time series data with interactive charts</li>
+                            <li>Filter data by date range, recurrence, and more</li>
+                            <li>Compare multiple series side by side</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Chart Container -->
+                <div id="chart-container" class="hidden">
+                    <div class="chart-header">
+                        <h2 id="chart-title">Data Visualization</h2>
+                        <div class="chart-controls">
+                            <label for="chart-type">Chart Type:</label>
+                            <select id="chart-type" class="form-control-small">
+                                <option value="line">Line</option>
+                                <option value="bar">Bar</option>
+                                <option value="area">Area</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="main-chart"></canvas>
+                    </div>
+                    <div id="data-info" class="data-info"></div>
+                </div>
+
+                <!-- Data Table -->
+                <div id="table-container" class="hidden">
+                    <h3>Data Table</h3>
+                    <div class="table-wrapper">
+                        <table id="data-table">
+                            <thead>
+                                <tr id="table-header"></tr>
+                            </thead>
+                            <tbody id="table-body"></tbody>
+                        </table>
+                    </div>
+                    <button id="export-csv-btn" class="btn btn-secondary">
+                        Export to CSV
+                    </button>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
