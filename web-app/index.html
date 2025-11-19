@@ -15,7 +15,18 @@
             <p class="subtitle">Portuguese Central Bank Statistical Data Explorer</p>
         </header>
 
-        <!-- Main Content -->
+        <!-- Tab Navigation -->
+        <nav class="tab-navigation">
+            <button class="tab-button active" data-tab="explorer">
+                Data Explorer
+            </button>
+            <button class="tab-button" data-tab="taxes">
+                Tax Collection
+            </button>
+        </nav>
+
+        <!-- Tab: Data Explorer -->
+        <div id="tab-explorer" class="tab-content active">
         <div class="main-content">
             <!-- Sidebar -->
             <aside class="sidebar">
@@ -178,6 +189,259 @@
                     </button>
                 </div>
             </main>
+        </div>
+        </div>
+        <!-- End Tab: Data Explorer -->
+
+        <!-- Tab: Tax Collection -->
+        <div id="tab-taxes" class="tab-content">
+            <div class="main-content">
+                <!-- Tax Collection Sidebar -->
+                <aside class="sidebar">
+                    <div class="panel">
+                        <h2>Tax Collection Analysis</h2>
+                        <p class="help-text">Explore annual tax revenue data from Portuguese government sources.</p>
+
+                        <!-- Year Range Selection -->
+                        <div class="form-group">
+                            <label for="tax-year-from">From Year:</label>
+                            <input
+                                type="number"
+                                id="tax-year-from"
+                                class="form-control"
+                                placeholder="e.g., 2000"
+                                min="1990"
+                                max="2030"
+                            >
+                        </div>
+
+                        <div class="form-group">
+                            <label for="tax-year-to">To Year:</label>
+                            <input
+                                type="number"
+                                id="tax-year-to"
+                                class="form-control"
+                                placeholder="e.g., 2023"
+                                min="1990"
+                                max="2030"
+                            >
+                        </div>
+
+                        <!-- Tax Type Selection -->
+                        <div class="form-group">
+                            <label>Tax Categories:</label>
+                            <div class="checkbox-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="tax-total" value="total" checked>
+                                    <span>Total Tax Revenue</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="tax-direct" value="direct">
+                                    <span>Direct Taxes (IRS, IRC)</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="tax-indirect" value="indirect">
+                                    <span>Indirect Taxes (IVA, ISV)</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="tax-irs" value="irs">
+                                    <span>IRS (Personal Income)</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="tax-irc" value="irc">
+                                    <span>IRC (Corporate)</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="tax-iva" value="iva">
+                                    <span>IVA (VAT)</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Configuration Status -->
+                        <div class="config-status">
+                            <h3>Configuration</h3>
+                            <p id="tax-config-status" class="help-text">
+                                ⚠️ Tax series need to be configured. See instructions below.
+                            </p>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="actions">
+                            <button id="load-tax-data-btn" class="btn btn-primary">
+                                Load Tax Data
+                            </button>
+                            <button id="tax-clear-btn" class="btn btn-secondary">
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Instructions Panel -->
+                    <div class="panel instructions-panel">
+                        <h3>📋 Setup Instructions</h3>
+                        <ol class="instructions-list">
+                            <li>Find tax series IDs at <a href="https://bpstat.bportugal.pt/" target="_blank">BPStat Portal</a></li>
+                            <li>Search for "receitas fiscais" or "impostos"</li>
+                            <li>Copy series IDs from URLs</li>
+                            <li>Configure in <code>app.js</code> (see TAX_CONFIG)</li>
+                        </ol>
+                        <button id="show-config-help-btn" class="btn btn-secondary btn-small">
+                            Show Configuration Guide
+                        </button>
+                    </div>
+                </aside>
+
+                <!-- Tax Visualization Area -->
+                <main class="content">
+                    <!-- Tax Loading State -->
+                    <div id="tax-loading-state" class="hidden">
+                        <div class="spinner"></div>
+                        <p>Loading tax data...</p>
+                    </div>
+
+                    <!-- Tax Error State -->
+                    <div id="tax-error-state" class="hidden">
+                        <div class="error-message">
+                            <h3>Error</h3>
+                            <p id="tax-error-text"></p>
+                        </div>
+                    </div>
+
+                    <!-- Tax Empty State -->
+                    <div id="tax-empty-state">
+                        <div class="empty-message">
+                            <h2>📊 Tax Collection Visualization</h2>
+                            <p>View annual tax revenue trends for Portugal</p>
+
+                            <div class="info-card">
+                                <h3>Available Tax Data</h3>
+                                <ul class="features-list">
+                                    <li>Total tax revenue per year</li>
+                                    <li>Direct vs Indirect taxes breakdown</li>
+                                    <li>IRS (Personal Income Tax) trends</li>
+                                    <li>IRC (Corporate Tax) analysis</li>
+                                    <li>IVA (VAT) collection data</li>
+                                    <li>Year-over-year growth rates</li>
+                                </ul>
+                            </div>
+
+                            <div class="info-card warning">
+                                <h3>⚙️ Configuration Required</h3>
+                                <p>To use this feature, you need to:</p>
+                                <ol>
+                                    <li>Find the appropriate tax series IDs from the BPStat portal</li>
+                                    <li>Add them to the TAX_CONFIG in app.js</li>
+                                    <li>See the sidebar for detailed instructions</li>
+                                </ol>
+                                <p class="help-text">
+                                    Example series types: "Receitas fiscais", "IRS", "IRC", "IVA"
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tax Chart Container -->
+                    <div id="tax-chart-container" class="hidden">
+                        <div class="chart-header">
+                            <h2 id="tax-chart-title">Tax Collection Over Time</h2>
+                            <div class="chart-controls">
+                                <label for="tax-chart-type">Chart Type:</label>
+                                <select id="tax-chart-type" class="form-control-small">
+                                    <option value="line">Line</option>
+                                    <option value="bar">Bar</option>
+                                    <option value="area">Area (Stacked)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="chart-wrapper">
+                            <canvas id="tax-chart"></canvas>
+                        </div>
+                        <div id="tax-data-info" class="data-info"></div>
+                    </div>
+
+                    <!-- Tax Summary Stats -->
+                    <div id="tax-summary" class="hidden">
+                        <h3>Summary Statistics</h3>
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <h4>Latest Year</h4>
+                                <p id="stat-latest-year" class="stat-value">-</p>
+                            </div>
+                            <div class="stat-card">
+                                <h4>Total Revenue</h4>
+                                <p id="stat-total-revenue" class="stat-value">-</p>
+                            </div>
+                            <div class="stat-card">
+                                <h4>YoY Growth</h4>
+                                <p id="stat-yoy-growth" class="stat-value">-</p>
+                            </div>
+                            <div class="stat-card">
+                                <h4>Average (Period)</h4>
+                                <p id="stat-avg-revenue" class="stat-value">-</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tax Data Table -->
+                    <div id="tax-table-container" class="hidden">
+                        <h3>Tax Revenue by Year</h3>
+                        <div class="table-wrapper">
+                            <table id="tax-data-table">
+                                <thead>
+                                    <tr id="tax-table-header"></tr>
+                                </thead>
+                                <tbody id="tax-table-body"></tbody>
+                            </table>
+                        </div>
+                        <button id="tax-export-csv-btn" class="btn btn-secondary">
+                            Export to CSV
+                        </button>
+                    </div>
+                </main>
+            </div>
+        </div>
+        <!-- End Tab: Tax Collection -->
+
+        <!-- Configuration Help Modal -->
+        <div id="config-help-modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Tax Data Configuration Guide</h2>
+                    <button id="close-modal-btn" class="close-btn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <h3>How to Configure Tax Series</h3>
+                    <p>Follow these steps to enable tax data visualization:</p>
+
+                    <h4>Step 1: Find Series IDs</h4>
+                    <ol>
+                        <li>Visit <a href="https://bpstat.bportugal.pt/" target="_blank">https://bpstat.bportugal.pt/</a></li>
+                        <li>Search for: "receitas fiscais", "IRS", "IRC", or "IVA"</li>
+                        <li>Click on a relevant series</li>
+                        <li>Copy the series ID from the URL: <code>https://bpstat.bportugal.pt/serie/[ID]</code></li>
+                    </ol>
+
+                    <h4>Step 2: Configure in app.js</h4>
+                    <p>Open <code>app.js</code> and find the <code>TAX_CONFIG</code> object. Add your series IDs:</p>
+                    <pre><code>const TAX_CONFIG = {
+    enabled: true,
+    series: {
+        total: { id: '123456', label: 'Total Tax Revenue' },
+        irs: { id: '234567', label: 'IRS' },
+        irc: { id: '345678', label: 'IRC' },
+        iva: { id: '456789', label: 'IVA' }
+    }
+};</code></pre>
+
+                    <h4>Step 3: Test</h4>
+                    <p>Reload the page and click "Load Tax Data"</p>
+
+                    <h4>Search Terms</h4>
+                    <p><strong>Portuguese:</strong> receitas fiscais, impostos, IRS, IRC, IVA, finanças públicas</p>
+                    <p><strong>English:</strong> tax revenue, taxes, fiscal, public finance</p>
+                </div>
+            </div>
         </div>
     </div>
 

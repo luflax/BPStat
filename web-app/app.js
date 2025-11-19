@@ -86,6 +86,23 @@ class BPStatAPI {
 // ===== Initialize API Client =====
 const api = new BPStatAPI(CONFIG.API_BASE_URL, CONFIG.DEFAULT_LANG);
 
+// ===== Tax Configuration =====
+// Configure tax series IDs here after finding them on bpstat.bportugal.pt
+const TAX_CONFIG = {
+    enabled: false, // Set to true after configuring series IDs
+    series: {
+        // Example configuration - replace with actual series IDs
+        // Find series IDs at https://bpstat.bportugal.pt/ by searching for:
+        // "receitas fiscais", "IRS", "IRC", "IVA", "impostos"
+        total: { id: null, label: 'Total Tax Revenue', domainId: null, datasetId: null },
+        direct: { id: null, label: 'Direct Taxes', domainId: null, datasetId: null },
+        indirect: { id: null, label: 'Indirect Taxes', domainId: null, datasetId: null },
+        irs: { id: null, label: 'IRS (Personal Income Tax)', domainId: null, datasetId: null },
+        irc: { id: null, label: 'IRC (Corporate Tax)', domainId: null, datasetId: null },
+        iva: { id: null, label: 'IVA (VAT)', domainId: null, datasetId: null }
+    }
+};
+
 // ===== DOM Elements =====
 const elements = {
     // Selects and inputs
@@ -122,7 +139,54 @@ const elements = {
     apiStatus: document.getElementById('api-status'),
     statusText: document.getElementById('status-text'),
     throttleInfo: document.getElementById('throttle-info'),
-    throttleValue: document.getElementById('throttle-value')
+    throttleValue: document.getElementById('throttle-value'),
+
+    // Tab navigation
+    tabButtons: document.querySelectorAll('.tab-button'),
+    tabExplorer: document.getElementById('tab-explorer'),
+    tabTaxes: document.getElementById('tab-taxes'),
+
+    // Tax elements
+    taxYearFrom: document.getElementById('tax-year-from'),
+    taxYearTo: document.getElementById('tax-year-to'),
+    loadTaxDataBtn: document.getElementById('load-tax-data-btn'),
+    taxClearBtn: document.getElementById('tax-clear-btn'),
+    showConfigHelpBtn: document.getElementById('show-config-help-btn'),
+    closeModalBtn: document.getElementById('close-modal-btn'),
+    configHelpModal: document.getElementById('config-help-modal'),
+    taxConfigStatus: document.getElementById('tax-config-status'),
+
+    // Tax checkboxes
+    taxTotal: document.getElementById('tax-total'),
+    taxDirect: document.getElementById('tax-direct'),
+    taxIndirect: document.getElementById('tax-indirect'),
+    taxIrs: document.getElementById('tax-irs'),
+    taxIrc: document.getElementById('tax-irc'),
+    taxIva: document.getElementById('tax-iva'),
+
+    // Tax states
+    taxLoadingState: document.getElementById('tax-loading-state'),
+    taxErrorState: document.getElementById('tax-error-state'),
+    taxEmptyState: document.getElementById('tax-empty-state'),
+    taxErrorText: document.getElementById('tax-error-text'),
+
+    // Tax chart and table
+    taxChartContainer: document.getElementById('tax-chart-container'),
+    taxChartTitle: document.getElementById('tax-chart-title'),
+    taxChart: document.getElementById('tax-chart'),
+    taxChartType: document.getElementById('tax-chart-type'),
+    taxDataInfo: document.getElementById('tax-data-info'),
+    taxSummary: document.getElementById('tax-summary'),
+    taxTableContainer: document.getElementById('tax-table-container'),
+    taxTableHeader: document.getElementById('tax-table-header'),
+    taxTableBody: document.getElementById('tax-table-body'),
+    taxExportCsvBtn: document.getElementById('tax-export-csv-btn'),
+
+    // Tax stats
+    statLatestYear: document.getElementById('stat-latest-year'),
+    statTotalRevenue: document.getElementById('stat-total-revenue'),
+    statYoyGrowth: document.getElementById('stat-yoy-growth'),
+    statAvgRevenue: document.getElementById('stat-avg-revenue')
 };
 
 // ===== Utility Functions =====
@@ -599,7 +663,448 @@ function handleChartTypeChange() {
     }
 }
 
+// ===== Tab Functions =====
+function switchTab(tabName) {
+    // Update tab buttons
+    elements.tabButtons.forEach(btn => {
+        if (btn.dataset.tab === tabName) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+
+    // Update tab content
+    if (tabName === 'explorer') {
+        elements.tabExplorer.classList.add('active');
+        elements.tabTaxes.classList.remove('active');
+    } else if (tabName === 'taxes') {
+        elements.tabExplorer.classList.remove('active');
+        elements.tabTaxes.classList.add('active');
+        checkTaxConfig();
+    }
+}
+
+// ===== Tax Functions =====
+function checkTaxConfig() {
+    const hasValidConfig = TAX_CONFIG.enabled && Object.values(TAX_CONFIG.series).some(s => s.id);
+
+    if (hasValidConfig) {
+        elements.taxConfigStatus.innerHTML = '✅ Tax series configured and ready';
+        elements.taxConfigStatus.style.color = 'var(--success-color)';
+    } else {
+        elements.taxConfigStatus.innerHTML = '⚠️ Tax series need to be configured. See instructions below.';
+        elements.taxConfigStatus.style.color = 'var(--warning-color)';
+    }
+}
+
+function showTaxState(stateName) {
+    const states = {
+        loading: elements.taxLoadingState,
+        error: elements.taxErrorState,
+        empty: elements.taxEmptyState,
+        chart: elements.taxChartContainer,
+        summary: elements.taxSummary,
+        table: elements.taxTableContainer
+    };
+
+    Object.entries(states).forEach(([name, element]) => {
+        if (element) {
+            element.classList.toggle('hidden', name !== stateName && !['chart', 'summary', 'table'].includes(stateName));
+        }
+    });
+
+    // Show chart, summary, and table together when data is loaded
+    if (stateName === 'chart') {
+        elements.taxChartContainer.classList.remove('hidden');
+        elements.taxSummary.classList.remove('hidden');
+        elements.taxTableContainer.classList.remove('hidden');
+    }
+}
+
+function showTaxError(message) {
+    elements.taxErrorText.textContent = message;
+    showTaxState('error');
+}
+
+async function loadTaxData() {
+    if (!TAX_CONFIG.enabled) {
+        showTaxError('Tax data is not configured. Please configure TAX_CONFIG in app.js with your series IDs.');
+        return;
+    }
+
+    try {
+        showTaxState('loading');
+
+        // Get selected tax categories
+        const selectedCategories = [];
+        if (elements.taxTotal.checked && TAX_CONFIG.series.total.id) selectedCategories.push('total');
+        if (elements.taxDirect.checked && TAX_CONFIG.series.direct.id) selectedCategories.push('direct');
+        if (elements.taxIndirect.checked && TAX_CONFIG.series.indirect.id) selectedCategories.push('indirect');
+        if (elements.taxIrs.checked && TAX_CONFIG.series.irs.id) selectedCategories.push('irs');
+        if (elements.taxIrc.checked && TAX_CONFIG.series.irc.id) selectedCategories.push('irc');
+        if (elements.taxIva.checked && TAX_CONFIG.series.iva.id) selectedCategories.push('iva');
+
+        if (selectedCategories.length === 0) {
+            showTaxError('Please select at least one tax category and ensure it is configured.');
+            return;
+        }
+
+        // Build filters
+        const filters = {
+            recurrence: 'A' // Annual data
+        };
+
+        const yearFrom = elements.taxYearFrom.value;
+        const yearTo = elements.taxYearTo.value;
+
+        if (yearFrom) filters.obs_since = `${yearFrom}-01-01`;
+        if (yearTo) filters.obs_to = `${yearTo}-12-31`;
+
+        // Fetch data for each selected category
+        const taxData = {};
+        const fetchPromises = [];
+
+        for (const category of selectedCategories) {
+            const config = TAX_CONFIG.series[category];
+            if (!config.id || !config.domainId || !config.datasetId) {
+                console.warn(`Skipping ${category}: missing configuration`);
+                continue;
+            }
+
+            const promise = api.getDataset(
+                config.domainId,
+                config.datasetId,
+                { ...filters, series_ids: config.id }
+            ).then(data => {
+                taxData[category] = { data, config };
+            }).catch(err => {
+                console.error(`Error fetching ${category}:`, err);
+            });
+
+            fetchPromises.push(promise);
+        }
+
+        await Promise.all(fetchPromises);
+
+        if (Object.keys(taxData).length === 0) {
+            showTaxError('No data could be loaded. Please check your configuration.');
+            return;
+        }
+
+        // Process and visualize
+        appState.currentTaxData = taxData;
+        createTaxChart(taxData, elements.taxChartType.value);
+        createTaxTable(taxData);
+        calculateTaxSummary(taxData);
+
+    } catch (error) {
+        showTaxError(`Failed to load tax data: ${error.message}`);
+    }
+}
+
+function createTaxChart(taxData, chartType = 'line') {
+    if (appState.currentTaxChart) {
+        appState.currentTaxChart.destroy();
+    }
+
+    const ctx = elements.taxChart.getContext('2d');
+
+    // Combine all data by year
+    const allYears = new Set();
+    const datasets = [];
+
+    Object.entries(taxData).forEach(([category, { data, config }]) => {
+        const parsed = parseJSONStat(data);
+
+        if (parsed.observations && parsed.observations.length > 0) {
+            const years = parsed.observations.map(obs => {
+                const date = obs.date;
+                return date ? date.split('-')[0] : date;
+            });
+            const values = parsed.observations.map(obs => obs.value);
+
+            years.forEach(year => allYears.add(year));
+
+            datasets.push({
+                label: config.label,
+                data: years.map((year, idx) => ({ x: year, y: values[idx] })),
+                borderColor: getColorForCategory(category),
+                backgroundColor: getColorForCategory(category, 0.1),
+                borderWidth: 2,
+                fill: chartType === 'area',
+                tension: 0.1
+            });
+        }
+    });
+
+    const sortedYears = Array.from(allYears).sort();
+
+    const chartConfig = {
+        type: chartType === 'area' ? 'line' : chartType,
+        data: {
+            labels: sortedYears,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.parsed.y !== null) {
+                                label += new Intl.NumberFormat('pt-PT').format(context.parsed.y);
+                            }
+                            return label;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Year'
+                    }
+                },
+                y: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Tax Revenue (EUR millions)'
+                    },
+                    ticks: {
+                        callback: function(value) {
+                            return new Intl.NumberFormat('pt-PT', { notation: 'compact' }).format(value);
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    if (chartType === 'area') {
+        chartConfig.options.scales.y.stacked = true;
+        chartConfig.options.scales.x.stacked = true;
+    }
+
+    appState.currentTaxChart = new Chart(ctx, chartConfig);
+
+    const categoriesCount = Object.keys(taxData).length;
+    elements.taxDataInfo.textContent = `Displaying ${categoriesCount} tax categor${categoriesCount > 1 ? 'ies' : 'y'} | Annual data | Source: Banco de Portugal`;
+
+    showTaxState('chart');
+}
+
+function createTaxTable(taxData) {
+    elements.taxTableHeader.innerHTML = '';
+    elements.taxTableBody.innerHTML = '';
+
+    // Collect all years
+    const allYears = new Set();
+    const categorizedData = {};
+
+    Object.entries(taxData).forEach(([category, { data, config }]) => {
+        const parsed = parseJSONStat(data);
+        categorizedData[category] = { label: config.label, byYear: {} };
+
+        parsed.observations.forEach(obs => {
+            const year = obs.date ? obs.date.split('-')[0] : obs.date;
+            allYears.add(year);
+            categorizedData[category].byYear[year] = obs.value;
+        });
+    });
+
+    const sortedYears = Array.from(allYears).sort().reverse();
+
+    // Create headers
+    const thYear = document.createElement('th');
+    thYear.textContent = 'Year';
+    elements.taxTableHeader.appendChild(thYear);
+
+    Object.values(categorizedData).forEach(cat => {
+        const th = document.createElement('th');
+        th.textContent = cat.label;
+        elements.taxTableHeader.appendChild(th);
+    });
+
+    // Create rows
+    sortedYears.forEach(year => {
+        const tr = document.createElement('tr');
+
+        const tdYear = document.createElement('td');
+        tdYear.textContent = year;
+        tdYear.style.fontWeight = '600';
+        tr.appendChild(tdYear);
+
+        Object.values(categorizedData).forEach(cat => {
+            const td = document.createElement('td');
+            const value = cat.byYear[year];
+            td.textContent = value !== null && value !== undefined
+                ? new Intl.NumberFormat('pt-PT').format(value)
+                : 'N/A';
+            tr.appendChild(td);
+        });
+
+        elements.taxTableBody.appendChild(tr);
+    });
+}
+
+function calculateTaxSummary(taxData) {
+    // Use total if available, otherwise use first category
+    const primaryCategory = taxData.total || Object.values(taxData)[0];
+
+    if (!primaryCategory) return;
+
+    const parsed = parseJSONStat(primaryCategory.data);
+    const observations = parsed.observations.filter(obs => obs.value !== null);
+
+    if (observations.length === 0) return;
+
+    // Sort by year
+    observations.sort((a, b) => {
+        const yearA = a.date ? a.date.split('-')[0] : 0;
+        const yearB = b.date ? b.date.split('-')[0] : 0;
+        return yearA - yearB;
+    });
+
+    const latestObs = observations[observations.length - 1];
+    const latestYear = latestObs.date ? latestObs.date.split('-')[0] : 'N/A';
+    const latestValue = latestObs.value;
+
+    const previousObs = observations[observations.length - 2];
+    const yoyGrowth = previousObs
+        ? ((latestValue - previousObs.value) / previousObs.value * 100)
+        : 0;
+
+    const avgValue = observations.reduce((sum, obs) => sum + obs.value, 0) / observations.length;
+
+    elements.statLatestYear.textContent = latestYear;
+    elements.statTotalRevenue.textContent = `€${new Intl.NumberFormat('pt-PT', { notation: 'compact' }).format(latestValue)}M`;
+    elements.statYoyGrowth.textContent = `${yoyGrowth >= 0 ? '+' : ''}${yoyGrowth.toFixed(1)}%`;
+    elements.statYoyGrowth.style.color = yoyGrowth >= 0 ? 'var(--success-color)' : 'var(--danger-color)';
+    elements.statAvgRevenue.textContent = `€${new Intl.NumberFormat('pt-PT', { notation: 'compact' }).format(avgValue)}M`;
+}
+
+function getColorForCategory(category, alpha = 1) {
+    const colors = {
+        total: `rgba(0, 102, 204, ${alpha})`,
+        direct: `rgba(40, 167, 69, ${alpha})`,
+        indirect: `rgba(255, 193, 7, ${alpha})`,
+        irs: `rgba(220, 53, 69, ${alpha})`,
+        irc: `rgba(23, 162, 184, ${alpha})`,
+        iva: `rgba(111, 66, 193, ${alpha})`
+    };
+    return colors[category] || `rgba(108, 117, 125, ${alpha})`;
+}
+
+function handleTaxClear() {
+    if (appState.currentTaxChart) {
+        appState.currentTaxChart.destroy();
+        appState.currentTaxChart = null;
+    }
+
+    elements.taxYearFrom.value = '';
+    elements.taxYearTo.value = '';
+    elements.taxChartType.value = 'line';
+    appState.currentTaxData = null;
+
+    showTaxState('empty');
+}
+
+function handleTaxChartTypeChange() {
+    if (appState.currentTaxData) {
+        createTaxChart(appState.currentTaxData, elements.taxChartType.value);
+    }
+}
+
+function exportTaxToCSV() {
+    if (!appState.currentTaxData) return;
+
+    const allYears = new Set();
+    const categorizedData = {};
+
+    Object.entries(appState.currentTaxData).forEach(([category, { data, config }]) => {
+        const parsed = parseJSONStat(data);
+        categorizedData[category] = { label: config.label, byYear: {} };
+
+        parsed.observations.forEach(obs => {
+            const year = obs.date ? obs.date.split('-')[0] : obs.date;
+            allYears.add(year);
+            categorizedData[category].byYear[year] = obs.value;
+        });
+    });
+
+    const sortedYears = Array.from(allYears).sort();
+
+    // Create CSV
+    let csv = 'Year,' + Object.values(categorizedData).map(cat => cat.label).join(',') + '\n';
+
+    sortedYears.forEach(year => {
+        const values = Object.values(categorizedData).map(cat => cat.byYear[year] || '');
+        csv += `${year},${values.join(',')}\n`;
+    });
+
+    // Download
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', `tax_data_${Date.now()}.csv`);
+    link.style.visibility = 'hidden';
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// Update app state to include tax data
+appState.currentTaxChart = null;
+appState.currentTaxData = null;
+
 // ===== Event Listeners =====
+// Tab navigation
+elements.tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+        switchTab(btn.dataset.tab);
+    });
+});
+
+// Modal
+elements.showConfigHelpBtn.addEventListener('click', () => {
+    elements.configHelpModal.classList.remove('hidden');
+});
+
+elements.closeModalBtn.addEventListener('click', () => {
+    elements.configHelpModal.classList.add('hidden');
+});
+
+elements.configHelpModal.addEventListener('click', (e) => {
+    if (e.target === elements.configHelpModal) {
+        elements.configHelpModal.classList.add('hidden');
+    }
+});
+
+// Tax data actions
+elements.loadTaxDataBtn.addEventListener('click', loadTaxData);
+elements.taxClearBtn.addEventListener('click', handleTaxClear);
+elements.taxChartType.addEventListener('change', handleTaxChartTypeChange);
+elements.taxExportCsvBtn.addEventListener('click', exportTaxToCSV);
+
+// Data explorer actions
 elements.domainSelect.addEventListener('change', handleDomainChange);
 elements.datasetSelect.addEventListener('change', handleDatasetChange);
 elements.fetchDataBtn.addEventListener('click', fetchData);
